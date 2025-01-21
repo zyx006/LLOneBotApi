@@ -1,0 +1,3 @@
+websocket:
+    url: ws://localhost:3001
+    accessToken:
