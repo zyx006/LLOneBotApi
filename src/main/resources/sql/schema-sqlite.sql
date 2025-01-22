@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS group_sync (
+    group_id INTEGER NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS whitelist (
+    id INTEGER NOT NULL PRIMARY KEY,
+    username TEXT NOT NULL,
+    UNIQUE(id, username)
+);

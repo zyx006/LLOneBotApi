@@ -1,3 +1,31 @@
 websocket:
     url: ws://localhost:3001
     accessToken:
+
+spring:
+    datasource:
+        # 选择使用哪个数据源配置
+        active-db: sqlite  # 可选值: sqlite, mysql
+        sqlite:
+            url: jdbc:sqlite:onebot.sqlite
+            driver-class-name: org.sqlite.JDBC
+        mysql:
+            url: jdbc:mysql://localhost:3306/onebot?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+            driver-class-name: com.mysql.cj.jdbc.Driver
+            username: root
+            password: root
+        # 实际生效的配置，使用 SpEL 表达式根据 active-db 选择
+        driver-class-name: ${spring.datasource.${spring.datasource.active-db}.driver-class-name}
+        url: ${spring.datasource.${spring.datasource.active-db}.url}
+        username: ${spring.datasource.${spring.datasource.active-db}.username}
+        password: ${spring.datasource.${spring.datasource.active-db}.password}
+    sql:
+        init:
+            mode: always
+            schema-locations: classpath:sql/schema-${spring.datasource.active-db}.sql
+
+minecraft:
+    rcon:
+        host: localhost
+        port: 23456
+        password: rconpwd
