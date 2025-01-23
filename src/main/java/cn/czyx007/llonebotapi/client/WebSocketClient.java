@@ -97,7 +97,7 @@ public class WebSocketClient {
                         if (rawMessage.startsWith("禁言")) {
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
-                                if("禁言".equals(rawMessage)) {
+                                if("#禁言".equals(rawMessage)) {
                                     GroupAction.setGroupWholeBan(botData.getGroupId(), true);
                                 } else {
                                     String[] msg = rawMessage.split(" ");
@@ -110,15 +110,15 @@ public class WebSocketClient {
                                             GroupAction.sendGroupMsg(botData.getGroupId(), "禁言时长必须为整数(单位:秒)");
                                         }
                                     } else {
-                                        GroupAction.sendGroupMsg(botData.getGroupId(), "命令格式错误，应为：禁言 @群成员 禁言时长整数值(单位:秒)");
+                                        GroupAction.sendGroupMsg(botData.getGroupId(), "命令格式错误，应为：#禁言 @群成员 禁言时长整数值(单位:秒)");
                                     }
                                 }
                             }
-                        } else if (rawMessage.startsWith("取消禁言")) {
-                            //对应命令2：取消禁言 @群成员 或 取消禁言(全体禁言)
+                        } else if (rawMessage.startsWith("#取消禁言")) {
+                            //对应命令2：#取消禁言 @群成员 或 #取消禁言(全体禁言)
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
-                                if("取消禁言".equals(rawMessage)) {
+                                if("#取消禁言".equals(rawMessage)) {
                                     GroupAction.setGroupWholeBan(botData.getGroupId(), false);
                                 } else {
                                     String[] msg = rawMessage.split(" ");
@@ -126,12 +126,12 @@ public class WebSocketClient {
                                         BigInteger userId = CQUtil.getQQ(msg[1]);
                                         GroupAction.setGroupBan(botData.getGroupId(), userId, 0);
                                     } else {
-                                        GroupAction.sendGroupMsg(botData.getGroupId(), "命令格式错误，应为：取消禁言 @群成员");
+                                        GroupAction.sendGroupMsg(botData.getGroupId(), "命令格式错误，应为：#取消禁言 @群成员");
                                     }
                                 }
                             }
-                        } else if ("开启消息同步".equals(rawMessage)) {
-                            //对应命令3：开启消息同步，将当前消息来源群加入消息同步列表
+                        } else if ("#开启消息同步".equals(rawMessage)) {
+                            //对应命令3：#开启消息同步，将当前消息来源群加入消息同步列表
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
                                 //将当前群号加入同步列表
@@ -141,8 +141,8 @@ public class WebSocketClient {
                                     GroupAction.sendGroupMsg(botData.getGroupId(), "该群已添加，请勿重复开启！");
                                 }
                             }
-                        } else if ("关闭消息同步".equals(rawMessage)) {
-                            //对应命令4：关闭消息同步，将当前消息来源群移出消息同步列表
+                        } else if ("#关闭消息同步".equals(rawMessage)) {
+                            //对应命令4：#关闭消息同步，将当前消息来源群移出消息同步列表
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
                                 //将当前群号移出同步列表
@@ -152,9 +152,9 @@ public class WebSocketClient {
                                     GroupAction.sendGroupMsg(botData.getGroupId(), "该群已移除，请勿重复关闭！");
                                 }
                             }
-                        } else if (rawMessage.startsWith("白名单")) {
+                        } else if (rawMessage.startsWith("#白名单")) {
                             //对应命令5：绑定白名单
-                            //命令格式: 白名单 游戏名
+                            //命令格式: #白名单 游戏名
                             String[] msg = rawMessage.split(" ");
                             if (msg.length == 2) {
                                 WhiteList wl = whiteListService.getWhiteList(botData.getUserId());
@@ -169,10 +169,10 @@ public class WebSocketClient {
                                         }
                                     } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "用户名已存在或格式错误！\n用户名长度需在3到16个字符之间，只能包含字母、数字和下划线，且不能为纯数字");
                                 } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "你已绑定用户" + wl.getUsername() + "!");
-                            } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：白名单 游戏名");
-                        } else if (rawMessage.startsWith("修改白名单")) {
+                            } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#白名单 游戏名");
+                        } else if (rawMessage.startsWith("#修改白名单")) {
                             //对应命令6：修改白名单
-                            //命令格式: 修改白名单 @群成员 游戏名
+                            //命令格式: #修改白名单 @群成员 游戏名
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
                                 String[] msg = rawMessage.split(" ");
@@ -192,11 +192,11 @@ public class WebSocketClient {
                                             GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "白名单修改成功！");
                                         else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "白名单修改失败！");
                                     } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "用户名已存在或格式错误！\n用户名长度需在3到16个字符之间，只能包含字母、数字和下划线，且不能为纯数字");
-                                } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：修改白名单 @群成员 游戏名");
+                                } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#修改白名单 @群成员 游戏名");
                             }
-                        } else if (rawMessage.startsWith("删除白名单")) {
+                        } else if (rawMessage.startsWith("#删除白名单")) {
                             //对应命令7：删除白名单
-                            //命令格式: 删除白名单 @群成员，需要已存在白名单
+                            //命令格式: #删除白名单 @群成员，需要已存在白名单
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
                                 String[] msg = rawMessage.split(" ");
@@ -210,7 +210,7 @@ public class WebSocketClient {
                                     } else {
                                         GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "该用户不存在白名单！");
                                     }
-                                } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：删除白名单 @群成员");
+                                } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#删除白名单 @群成员");
                             }
                         } else {
                             //群消息广播
@@ -222,8 +222,8 @@ public class WebSocketClient {
                                     //若未设置群名片则群名片为""而不是null
                                     String oriHead = "用户(" +
                                             ("".equals(sender.getCard()) ? sender.getNickname() : sender.getCard()) +
-                                            ")在群" + botData.getGroupId() +
-                                            "发送了消息：\n";
+                                            //")在群" + botData.getGroupId() +
+                                            ")发送了消息：\n";
                                     //2.拼接消息串
                                     List<Message> messages = botData.getMessage();
                                     Map<String, String> data = new HashMap<>();
