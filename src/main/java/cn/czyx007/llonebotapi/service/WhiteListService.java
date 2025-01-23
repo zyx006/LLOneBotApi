@@ -25,6 +25,8 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
     @Value("${minecraft.rcon.password}")
     private String password;
 
+    private static int currentCount = 0;
+
     /**
      * rcon白名单命令封装
      * @param command 要执行的命令前缀(如whitelist add )
@@ -33,16 +35,20 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
      * @return true表示rcon执行成功，false表示执行失败
      */
     private boolean rconCommand(String command, String type, String username) {
-        log.info("开始为玩家 [{}] {}白名单", username, type);
+        if (type.contains("白名单"))
+            log.info("开始为玩家 [{}] {}", username, type);
         try (Rcon rcon = new Rcon(host, port, password)) {
             log.info("已成功连接到服务器 {}:{}", host, port);
             try {
-                log.info("发送白名单{}命令", type);
-                rcon.command(command + username);
-                log.info("白名单命令执行成功");
+                log.info("发送{}命令", type);
+                String res = rcon.command(command + username);
+                if (res.startsWith("There are ")){
+                    currentCount += Integer.parseInt(res.split(" ")[2].split("/")[0]);
+                }
+                log.info("{}命令执行成功", type);
                 return true;
             } catch (IOException e) {
-                log.error("执行白名单命令失败: {}", e.getMessage());
+                log.error("执行{}命令失败: {}", type, e.getMessage());
             }
         } catch (IOException | AuthenticationException e) {
             log.error("连接到RCON服务器失败 ({}:{}): {}", host, port, e.getMessage());
@@ -56,7 +62,7 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
      * @return true表示rcon命令执行成功且数据库保存成功，false表示白名单添加失败
      */
     public boolean addWhiteList(WhiteList whiteList) {
-        if (rconCommand("whitelist add ", "添加", whiteList.getUsername()))
+        if (rconCommand("whitelist add ", "添加白名单", whiteList.getUsername()))
             return this.save(whiteList);
         else return false;
     }
@@ -67,7 +73,7 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
      * @return true表示删除成功，false表示删除失败
      */
     public boolean delWhiteList(WhiteList whiteList) {
-        if(rconCommand("whitelist remove ", "删除" , whiteList.getUsername()))
+        if(rconCommand("whitelist remove ", "删除白名单" , whiteList.getUsername()))
             return this.removeById(whiteList.getId());
         else return false;
     }
@@ -79,8 +85,8 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
      * @return true表示更新成功，false表示更新失败
      */
     public boolean updateWhiteList(WhiteList whiteList, String previousUsername) {
-        if (rconCommand("whitelist remove ", "删除" , previousUsername))
-            if (rconCommand("whitelist add ", "添加" , whiteList.getUsername()))
+        if (rconCommand("whitelist remove ", "删除白名单" , previousUsername))
+            if (rconCommand("whitelist add ", "添加白名单" , whiteList.getUsername()))
                 return this.updateById(whiteList);
         return false;
     }
@@ -111,5 +117,24 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
      */
     public boolean usernamePatternCheck(String username) {
         return username.matches("^(?!\\d+$)[a-zA-Z0-9_]{3,16}$");
+    }
+
+    /**
+     * 获取当前在线人数
+     * @return 当前在线人数
+     */
+    public int currentOnlineCount() {
+        rconCommand("list", "在线人数获取", "");
+        int cnt = currentCount;
+        currentCount = 0;
+        return cnt;
+    }
+
+    /**
+     * 重启服务器
+     * @return true表示重启成功
+     */
+    public boolean restartServer() {
+        return rconCommand("restart", "重启", "");
     }
 }

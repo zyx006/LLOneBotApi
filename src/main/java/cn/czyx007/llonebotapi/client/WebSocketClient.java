@@ -23,9 +23,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.math.BigInteger;
 import java.net.URI;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Websocket客户端，用于Websocket链接的建立，信息处理等
@@ -38,6 +36,8 @@ public class WebSocketClient {
 
     @Value("${websocket.accessToken}")
     private String accessToken;
+
+    private static Set<BigInteger> voteMember = new HashSet<>();
 
     private final GroupSyncService groupSyncService;
     private final WhiteListService whiteListService;
@@ -103,7 +103,8 @@ public class WebSocketClient {
                                     "#关闭消息同步\n" +
                                     "#白名单 游戏名\n" +
                                     "#修改白名单 @群成员 游戏名\n" +
-                                    "#删除白名单 @群成员";
+                                    "#删除白名单 @群成员\n" +
+                                    "#重启投票";
                             GroupAction.sendGroupMsg(botData.getGroupId(), help);
                         } else if (rawMessage.startsWith("#禁言")) {
                             //对应命令1：禁言 @群成员 禁言时长整数值(单位:秒) 或 禁言(全体禁言)
@@ -223,6 +224,28 @@ public class WebSocketClient {
                                         GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "该用户不存在白名单！");
                                     }
                                 } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#删除白名单 @群成员");
+                            }
+                        } else if ("#重启投票".equals(rawMessage)) {
+                            //对应命令8：投票重启服务器，要求投票人数大于等于服务器在线人数一半（向下取整）（允许非玩家的群友帮忙）
+                            //命令格式: #重启投票
+                            //1.投票人数+1
+                            voteMember.add(botData.getUserId());
+                            //2.获取服务器在线人数
+                            int currentCount = whiteListService.currentOnlineCount();
+                            log.info("投票人数：{}，服务器在线人数：{}", voteMember.size(), currentCount);
+                            if (currentCount != 0) {
+                                //3.若投票人数大于等于一半则重启，并且清零计数
+                                if (voteMember.size() >= (currentCount/2)) {
+                                    whiteListService.restartServer();
+                                    voteMember.clear();
+                                    GroupAction.sendGroupMsg(botData.getGroupId(), "投票成功！正在重启服务器");
+                                } else {
+                                    GroupAction.sendGroupMsg(botData.getGroupId(),
+                                            "当前投票人数：" + voteMember.size() + "/" + currentCount);
+                                }
+                            } else {
+                                voteMember.clear();
+                                GroupAction.sendGroupMsg(botData.getGroupId(), "服务器当前无人在线！");
                             }
                         } else {
                             //群消息广播
