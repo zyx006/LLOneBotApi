@@ -93,8 +93,20 @@ public class WebSocketClient {
                     if("group".equals(botData.getMessageType())) {
                         String rawMessage = botData.getRawMessage();
                         log.info("用户{}在群{}发送了消息：{}", botData.getUserId(), botData.getGroupId(), rawMessage);
-                        //对应命令1：禁言 @群成员 禁言时长整数值(单位:秒) 或 禁言(全体禁言)
-                        if (rawMessage.startsWith("禁言")) {
+                        if ("#帮助".equals(rawMessage)) {
+                            //对应命令0：#帮助
+                            String help = "#禁言 @群成员 禁言时长(秒)\n" +
+                                    "#禁言 (全体禁言)\n" +
+                                    "#取消禁言 @群成员\n" +
+                                    "#取消禁言 (全体禁言)\n" +
+                                    "#开启消息同步\n" +
+                                    "#关闭消息同步\n" +
+                                    "#白名单 游戏名\n" +
+                                    "#修改白名单 @群成员 游戏名\n" +
+                                    "#删除白名单 @群成员";
+                            GroupAction.sendGroupMsg(botData.getGroupId(), help);
+                        } else if (rawMessage.startsWith("#禁言")) {
+                            //对应命令1：禁言 @群成员 禁言时长整数值(单位:秒) 或 禁言(全体禁言)
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
                                 if("#禁言".equals(rawMessage)) {
