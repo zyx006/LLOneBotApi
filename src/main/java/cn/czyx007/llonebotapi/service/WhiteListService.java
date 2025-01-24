@@ -47,6 +47,7 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
                     currentCount = Integer.parseInt(res.split(" ")[2].split("/")[0]);
                     if (currentCount > 0)
                         onlineUsers = res.split(":")[1];
+                    else onlineUsers = "";
                 }
                 log.info("{}命令执行成功", type);
                 return true;
