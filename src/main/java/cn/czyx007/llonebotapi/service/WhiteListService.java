@@ -26,6 +26,7 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
     private String password;
 
     private static int currentCount = 0;
+    private static String onlineUsers = "";
 
     /**
      * rcon白名单命令封装
@@ -43,7 +44,9 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
                 log.info("发送{}命令", type);
                 String res = rcon.command(command + username);
                 if (res.startsWith("There are ")){
-                    currentCount += Integer.parseInt(res.split(" ")[2].split("/")[0]);
+                    currentCount = Integer.parseInt(res.split(" ")[2].split("/")[0]);
+                    if (currentCount > 0)
+                        onlineUsers = res.split(":")[1];
                 }
                 log.info("{}命令执行成功", type);
                 return true;
@@ -52,6 +55,10 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
             }
         } catch (IOException | AuthenticationException e) {
             log.error("连接到RCON服务器失败 ({}:{}): {}", host, port, e.getMessage());
+            if ("list".equals(command)) {
+                currentCount = 0;
+                onlineUsers = "|offline|";
+            }
         }
         return false;
     }
@@ -125,9 +132,17 @@ public class WhiteListService extends ServiceImpl<WhiteListMapper, WhiteList> {
      */
     public int currentOnlineCount() {
         rconCommand("list", "在线人数获取", "");
-        int cnt = currentCount;
-        currentCount = 0;
-        return cnt;
+        return currentCount;
+    }
+
+    /**
+     * 检查当前用户名是否服务器在线
+     * @param username 用户名
+     * @return "true"表示在线，"|offline|"表示服务器未开启或RCON连接失败
+     */
+    public String isUserOnline(String username) {
+        rconCommand("list", "在线玩家列表获取", "");
+        return "|offline|".equals(onlineUsers) ? "|offline|" : (onlineUsers.contains(username) ? "true" : "false");
     }
 
     /**

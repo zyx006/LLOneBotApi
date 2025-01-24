@@ -8,6 +8,7 @@ import cn.czyx007.llonebotapi.service.GroupSyncService;
 import cn.czyx007.llonebotapi.service.WhiteListService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tomcat.util.json.JSONParser;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +25,9 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.math.BigInteger;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Websocket客户端，用于Websocket链接的建立，信息处理等
@@ -37,7 +41,13 @@ public class WebSocketClient {
     @Value("${websocket.accessToken}")
     private String accessToken;
 
-    private static Set<BigInteger> voteMember = new HashSet<>();
+    @Value("${minecraft.enable}")
+    private boolean mcEnable;
+
+    private Set<BigInteger> voteMember = new HashSet<>();
+
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1); // 全局线程池
+    private volatile boolean isConnecting = false; // 避免重复连接
 
     private final GroupSyncService groupSyncService;
     private final WhiteListService whiteListService;
@@ -48,23 +58,46 @@ public class WebSocketClient {
     }
 
     @EventListener(ApplicationReadyEvent.class)
-    public void connect() {
+    public void start() {
+        connect();
+    }
+
+    private void connect() {
+        if (isConnecting) return;
+
+        isConnecting = true;
         try {
+            log.info("正在连接到 WebSocket 服务: {}", uri);
             StandardWebSocketClient client = new StandardWebSocketClient();
             if(accessToken != null && !accessToken.isBlank()) {
                 WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
                 headers.set("Authorization", "Bearer " + accessToken);
-                client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), headers, URI.create(uri));
+                client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), headers, URI.create(uri)).get();
             } else {
-                client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), uri);
+                client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), uri).get();
             }
-            log.info("正在连接到 WebSocket 服务: {}", uri);
+            isConnecting = false;
         } catch (Exception e) {
-            log.error(e.getMessage());
+            log.error("WebSocket 连接失败: {}", e.getMessage());
+            isConnecting = false;
+            reconnect();
         }
     }
 
-    private static class MyWebSocketHandler extends TextWebSocketHandler {
+    private void reconnect() {
+        scheduler.schedule(() -> {
+            log.info("正在尝试重新连接...");
+            connect();
+        }, 5, TimeUnit.SECONDS); // 延时 5 秒后重试
+    }
+
+    @PreDestroy
+    public void cleanup() {
+        log.info("清理 WebSocketClient 资源...");
+        scheduler.shutdown(); // 应用关闭时释放线程池
+    }
+
+    private class MyWebSocketHandler extends TextWebSocketHandler {
 
         private final GroupSyncService groupSyncService;
         private final WhiteListService whiteListService;
@@ -100,11 +133,13 @@ public class WebSocketClient {
                                     "#取消禁言 @群成员\n" +
                                     "#取消禁言 (全体禁言)\n" +
                                     "#开启消息同步\n" +
-                                    "#关闭消息同步\n" +
-                                    "#白名单 游戏名\n" +
-                                    "#修改白名单 @群成员 游戏名\n" +
-                                    "#删除白名单 @群成员\n" +
-                                    "#重启投票";
+                                    "#关闭消息同步";
+                            if (mcEnable) {
+                                help += "\n#白名单 游戏名\n" +
+                                        "#修改白名单 @群成员 游戏名\n" +
+                                        "#删除白名单 @群成员\n" +
+                                        "#重启投票";
+                            }
                             GroupAction.sendGroupMsg(botData.getGroupId(), help);
                         } else if (rawMessage.startsWith("#禁言")) {
                             //对应命令1：禁言 @群成员 禁言时长整数值(单位:秒) 或 禁言(全体禁言)
@@ -165,7 +200,7 @@ public class WebSocketClient {
                                     GroupAction.sendGroupMsg(botData.getGroupId(), "该群已移除，请勿重复关闭！");
                                 }
                             }
-                        } else if (rawMessage.startsWith("#白名单")) {
+                        } else if (mcEnable && rawMessage.startsWith("#白名单")) {
                             //对应命令5：绑定白名单
                             //命令格式: #白名单 游戏名
                             String[] msg = rawMessage.split(" ");
@@ -183,7 +218,7 @@ public class WebSocketClient {
                                     } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "用户名已存在或格式错误！\n用户名长度需在3到16个字符之间，只能包含字母、数字和下划线，且不能为纯数字");
                                 } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "你已绑定用户" + wl.getUsername() + "!");
                             } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#白名单 游戏名");
-                        } else if (rawMessage.startsWith("#修改白名单")) {
+                        } else if (mcEnable && rawMessage.startsWith("#修改白名单")) {
                             //对应命令6：修改白名单
                             //命令格式: #修改白名单 @群成员 游戏名
                             //权限要求：群主或管理员
@@ -207,7 +242,7 @@ public class WebSocketClient {
                                     } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "用户名已存在或格式错误！\n用户名长度需在3到16个字符之间，只能包含字母、数字和下划线，且不能为纯数字");
                                 } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#修改白名单 @群成员 游戏名");
                             }
-                        } else if (rawMessage.startsWith("#删除白名单")) {
+                        } else if (mcEnable && rawMessage.startsWith("#删除白名单")) {
                             //对应命令7：删除白名单
                             //命令格式: #删除白名单 @群成员，需要已存在白名单
                             //权限要求：群主或管理员
@@ -225,28 +260,33 @@ public class WebSocketClient {
                                     }
                                 } else GroupAction.sendGroupMsgReply(botData.getGroupId(), botData.getMessageId(), "命令格式错误，应为：#删除白名单 @群成员");
                             }
-                        } else if ("#重启投票".equals(rawMessage)) {
-                            //对应命令8：投票重启服务器，要求投票人数大于等于服务器在线人数一半（向下取整）（允许非玩家的群友帮忙）
+                        } else if (mcEnable && "#重启投票".equals(rawMessage)) {
+                            //对应命令8：投票重启服务器，要求投票人数大于等于服务器在线人数一半（向下取整）
                             //命令格式: #重启投票
-                            //1.投票人数+1
-                            voteMember.add(botData.getUserId());
-                            //2.获取服务器在线人数
-                            int currentCount = whiteListService.currentOnlineCount();
-                            log.info("投票人数：{}，服务器在线人数：{}", voteMember.size(), currentCount);
-                            if (currentCount != 0) {
-                                //3.若投票人数大于等于一半则重启，并且清零计数
-                                if (voteMember.size() >= (currentCount/2)) {
-                                    whiteListService.restartServer();
-                                    voteMember.clear();
-                                    GroupAction.sendGroupMsg(botData.getGroupId(), "投票成功！正在重启服务器");
-                                } else {
-                                    GroupAction.sendGroupMsg(botData.getGroupId(),
-                                            "当前投票人数：" + voteMember.size() + "/" + currentCount);
+                            //1.检查投票人是否有白名单且服务器在线，满足条件则尝试投票人数+1
+                            WhiteList wl = whiteListService.getWhiteList(botData.getUserId());
+                            if (wl != null) {
+                                String onlineStatus = whiteListService.isUserOnline(wl.getUsername());
+                                if ("true".equals(onlineStatus)) {
+                                    voteMember.add(botData.getUserId());
+                                    //2.获取服务器在线人数
+                                    int currentCount = whiteListService.currentOnlineCount();
+                                    log.info("投票人数：{}，服务器在线人数：{}", voteMember.size(), currentCount);
+                                    //3.若投票人数大于等于一半则重启，并且清零计数
+                                    if (voteMember.size() >= (currentCount / 2)) {
+                                        whiteListService.restartServer();
+                                        voteMember.clear();
+                                        GroupAction.sendGroupMsg(botData.getGroupId(), "投票成功！正在重启服务器");
+                                    } else {
+                                        GroupAction.sendGroupMsg(botData.getGroupId(),
+                                                "当前投票人数：" + voteMember.size() + "/" + currentCount);
+                                    }
+                                } else if ("false".equals(onlineStatus)) {
+                                    GroupAction.sendGroupMsg(botData.getGroupId(), "你不在服务器中！");
+                                } else if ("|offline|".equals(onlineStatus)) {
+                                    GroupAction.sendGroupMsg(botData.getGroupId(), "服务器未开启！");
                                 }
-                            } else {
-                                voteMember.clear();
-                                GroupAction.sendGroupMsg(botData.getGroupId(), "服务器当前无人在线！");
-                            }
+                            } else GroupAction.sendGroupMsg(botData.getGroupId(), "你不在白名单中！");
                         } else {
                             //群消息广播
                             if (groupSyncService.ifExists(botData.getGroupId())) {
@@ -282,11 +322,13 @@ public class WebSocketClient {
         @Override
         public void handleTransportError(WebSocketSession session, Throwable exception) {
             log.error("WebSocket 传输错误：{}", exception.getMessage());
+            reconnect();
         }
 
         @Override
         public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
             log.info("WebSocket 连接已关闭，状态：{}", status);
+            reconnect();
         }
     }
 }

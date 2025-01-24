@@ -25,6 +25,7 @@ spring:
             schema-locations: classpath:sql/schema-${spring.datasource.active-db}.sql
 
 minecraft:
+    enable: true
     rcon:
         host: localhost
         port: 23456
