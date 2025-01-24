@@ -13,7 +13,7 @@
 
 ### 功能描述
 
-基于正向WebSocket(SpringBoot)实现的LLOneBot接口对接，目前已实现以下功能：
+基于正向WebSocket(SpringBoot)实现的LLOneBot接口对接，支持自动重连，目前已实现以下功能：
 
 1、消息监听(输出到控制台日志)
 
@@ -21,7 +21,7 @@
 
 3、开启(关闭)消息同步，将某个群的消息广播到其他开启消息同步功能的群
 
-4、Minecraft白名单绑定、修改、删除功能（基于RCON协议）
+4、Minecraft白名单绑定、修改、删除和服务器重启投票功能（基于RCON协议）
 
 5、部分群组相关 接口/动作 实现(详见action.GroupAction)：
     
@@ -45,7 +45,7 @@
 
 ### 配置文件
 
-1、配置Websocket链接地址，如：
+1、配置Websocket链接地址(支持自动重连)，如：
 
 ```yaml
 websocket:
@@ -70,10 +70,11 @@ CHARACTER SET utf8mb4
 COLLATE utf8mb4_bin;
 ```
 
-3、Minecraft白名单(基于RCON协议)相关配置：
+3、Minecraft(基于RCON协议)相关配置：
 
 ```yaml
 minecraft:
+    enable: true #控制是否启用相关功能
     rcon:
         host: localhost
         port: 23456
