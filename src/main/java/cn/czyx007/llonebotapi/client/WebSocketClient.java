@@ -44,7 +44,7 @@ public class WebSocketClient {
     @Value("${minecraft.enable}")
     private boolean mcEnable;
 
-    private Set<BigInteger> voteMember = new HashSet<>();
+    private final Set<BigInteger> voteMember = new HashSet<>();
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1); // 全局线程池
     private volatile boolean isConnecting = false; // 避免重复连接
@@ -72,9 +72,9 @@ public class WebSocketClient {
             if(accessToken != null && !accessToken.isBlank()) {
                 WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
                 headers.set("Authorization", "Bearer " + accessToken);
-                client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), headers, URI.create(uri)).get();
+                GroupAction.session = client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), headers, URI.create(uri)).get();
             } else {
-                client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), uri).get();
+                GroupAction.session = client.execute(new MyWebSocketHandler(groupSyncService, whiteListService), uri).get();
             }
             isConnecting = false;
         } catch (Exception e) {
@@ -121,7 +121,7 @@ public class WebSocketClient {
                 String postType = (String) new JSONParser(payload).parseObject().get("post_type");
                 if (PostType.MESSAGE.equals(postType)) {
                     BotData botData = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE).readValue(payload, BotData.class);
-                    log.info(botData.toString());
+                    //log.info(botData.toString());
                     //群消息
                     if("group".equals(botData.getMessageType())) {
                         String rawMessage = botData.getRawMessage();

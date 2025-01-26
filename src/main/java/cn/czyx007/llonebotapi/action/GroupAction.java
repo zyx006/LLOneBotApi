@@ -4,26 +4,19 @@ import cn.czyx007.llonebotapi.bean.GroupSync;
 import cn.czyx007.llonebotapi.bean.Message;
 import cn.czyx007.llonebotapi.bean.SocketData;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.Cleanup;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.WebSocketSession;
-import org.springframework.web.socket.client.standard.StandardWebSocketClient;
-import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.math.BigInteger;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * 群组相关接口对接
@@ -31,34 +24,18 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Component
 public class GroupAction {
-    private static ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static String url;
-    private static String accessToken;
+    public static WebSocketSession session;
 
-    public GroupAction(@Value("${websocket.url}") String url,
-                       @Value("${websocket.accessToken}") String accessToken) {
-        GroupAction.url = url;
-        GroupAction.accessToken = accessToken;
-    }
-
-    // 创建新的 WebSocket 会话
-    private static WebSocketSession createSession() {
-        try {
-            StandardWebSocketClient client = new StandardWebSocketClient();
-            if(accessToken != null && !accessToken.isBlank()) {
-                WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
-                headers.set("Authorization", "Bearer " + accessToken);
-                return client.execute(new TextWebSocketHandler(), headers, URI.create(url)).get();
-            } else {
-                return client.execute(new TextWebSocketHandler(), url).get();
-            }
-        } catch (Exception e) {
-            log.error(e.getMessage());
-        }
-        //自动重连
-        return createSession();
-    }
+    private static final ExecutorService executor = new ThreadPoolExecutor(
+            5, // 核心线程数
+            10, // 最大线程数
+            60L, TimeUnit.SECONDS, // 空闲线程存活时间
+            new LinkedBlockingQueue<>(100), // 阻塞队列容量
+            Executors.defaultThreadFactory(), // 线程工厂
+            new ThreadPoolExecutor.CallerRunsPolicy() // 拒绝策略：调用线程运行任务
+    );
 
     /**
      * 发送Websocket数据
@@ -66,9 +43,7 @@ public class GroupAction {
      */
     private static void sendMessage(SocketData data) {
         try {
-            @Cleanup WebSocketSession session = createSession();
             //log.info("\nsendMessage:{}", new ObjectMapper().writerWithDefaultPrettyPrinter().writeValueAsString(data));
-
             String jsonString = objectMapper.writeValueAsString(data);
             TextMessage message = new TextMessage(jsonString);
             session.sendMessage(message);
@@ -219,24 +194,33 @@ public class GroupAction {
      * @param messages 要发送的消息串
      */
     public static void sendMultipleGroupMessages(List<GroupSync> groups, List<Message> messages) {
-        // 使用线程池并发处理
-        @Cleanup ExecutorService executor = Executors.newFixedThreadPool(5);
-        try {
-            for (GroupSync group : groups) {
-                executor.submit(() -> sendGroupMessage(group.getGroupId(), messages));
-            }
-        } finally {
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
-                    log.warn("线程池未在指定时间内完成任务，强制关闭！");
-                    executor.shutdownNow();
+        for (GroupSync group : groups) {
+            // 提交任务到线程池
+            executor.submit(() -> {
+                try {
+                    sendGroupMessage(group.getGroupId(), messages);
+                } catch (Exception e) {
+                    log.error("发送消息失败，群组ID: {}，异常信息: {}", group.getGroupId(), e.getMessage(), e);
                 }
-            } catch (InterruptedException e) {
-                log.error("线程池关闭时被中断：{}", e.getMessage());
+            });
+        }
+    }
+
+    /**
+     * 关闭全局线程池（如在应用关闭时调用）
+     */
+    @PreDestroy
+    public static void shutdownExecutor() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("线程池未在指定时间内完成任务，强制关闭！");
                 executor.shutdownNow();
-                Thread.currentThread().interrupt();
             }
+        } catch (InterruptedException e) {
+            log.error("线程池关闭时被中断：{}", e.getMessage());
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }
