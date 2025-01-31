@@ -6,6 +6,7 @@ import cn.czyx007.llonebotapi.action.GroupAction;
 import cn.czyx007.llonebotapi.bean.*;
 import cn.czyx007.llonebotapi.service.GroupSyncService;
 import cn.czyx007.llonebotapi.service.WhiteListService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import jakarta.annotation.PreDestroy;
@@ -14,13 +15,16 @@ import org.apache.tomcat.util.json.JSONParser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import reactor.core.publisher.Mono;
 
 import java.math.BigInteger;
 import java.net.URI;
@@ -43,6 +47,18 @@ public class WebSocketClient {
 
     @Value("${minecraft.enable}")
     private boolean mcEnable;
+
+    @Value("${api.enable}")
+    private boolean apiEnable;
+
+    @Value("${api.model}")
+    private String model;
+
+    @Value("${api.url}")
+    private String apiUrl;
+
+    @Value("${api.key}")
+    private String apiKey;
 
     private final Set<BigInteger> voteMember = new HashSet<>();
 
@@ -98,6 +114,8 @@ public class WebSocketClient {
     }
 
     private class MyWebSocketHandler extends TextWebSocketHandler {
+        private WebClient webClient;
+        private final ObjectMapper objectMapper = new ObjectMapper();
 
         private final GroupSyncService groupSyncService;
         private final WhiteListService whiteListService;
@@ -105,6 +123,15 @@ public class WebSocketClient {
         public MyWebSocketHandler(GroupSyncService groupSyncService, WhiteListService whiteListService) {
             this.groupSyncService = groupSyncService;
             this.whiteListService = whiteListService;
+
+            // 初始化WebClient（非阻塞式）
+            if (apiEnable) {
+                WebClient.Builder builder = WebClient.builder();
+                if (apiKey != null && !apiKey.isBlank())
+                    builder.defaultHeader("Authorization", "Bearer " + apiKey);
+                builder.defaultHeader("Content-Type", "application/json");
+                this.webClient = builder.build();
+            }
         }
 
         @Override
@@ -140,12 +167,15 @@ public class WebSocketClient {
                                         "#删除白名单 @群成员\n" +
                                         "#重启投票";
                             }
+                            if (apiEnable) {
+                                help += "\n#+非指令内容可聊天";
+                            }
                             GroupAction.sendGroupMsg(botData.getGroupId(), help);
                         } else if (rawMessage.startsWith("#禁言")) {
                             //对应命令1：禁言 @群成员 禁言时长整数值(单位:秒) 或 禁言(全体禁言)
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
-                                if("#禁言".equals(rawMessage)) {
+                                if ("#禁言".equals(rawMessage)) {
                                     GroupAction.setGroupWholeBan(botData.getGroupId(), true);
                                 } else {
                                     String[] msg = rawMessage.split(" ");
@@ -166,7 +196,7 @@ public class WebSocketClient {
                             //对应命令2：#取消禁言 @群成员 或 #取消禁言(全体禁言)
                             //权限要求：群主或管理员
                             if (!"member".equals(botData.getSender().getRole())) {
-                                if("#取消禁言".equals(rawMessage)) {
+                                if ("#取消禁言".equals(rawMessage)) {
                                     GroupAction.setGroupWholeBan(botData.getGroupId(), false);
                                 } else {
                                     String[] msg = rawMessage.split(" ");
@@ -232,7 +262,7 @@ public class WebSocketClient {
 
                                         boolean success;
                                         WhiteList wl = whiteListService.getWhiteList(userId);
-                                        if(wl != null)
+                                        if (wl != null)
                                             success = whiteListService.updateWhiteList(new WhiteList(username, userId), wl.getUsername());
                                         else success = whiteListService.addWhiteList(new WhiteList(username, userId));
 
@@ -287,6 +317,8 @@ public class WebSocketClient {
                                     GroupAction.sendGroupMsg(botData.getGroupId(), "服务器未开启！");
                                 }
                             } else GroupAction.sendGroupMsg(botData.getGroupId(), "你不在白名单中！");
+                        } else if (apiEnable && rawMessage.startsWith("#")) {
+                            callLLMApi(rawMessage.substring(1), botData.getGroupId());
                         } else {
                             //群消息广播
                             if (groupSyncService.ifExists(botData.getGroupId())) {
@@ -317,6 +349,45 @@ public class WebSocketClient {
             } catch (Exception e) {
                 log.error(e.getMessage());
             }
+        }
+
+        // 调用大模型API并异步回复
+        private void callLLMApi(String userInput, BigInteger groupId) {
+            // 构建请求体
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("model", model);
+            requestBody.put("messages", List.of(Map.of("role", "user", "content", userInput)));
+            requestBody.put("temperature", 0.6);
+
+            // 异步发送请求
+            webClient.post()
+                    .uri(apiUrl)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .onStatus(
+                            HttpStatusCode::isError, // 判断是否为错误状态码（如4xx/5xx）
+                            response -> {
+                                log.error("API 错误状态码: {}", response.statusCode());
+                                // 返回自定义异常（触发 subscribe 的 onError）
+                                return Mono.error(new RuntimeException("API请求失败，状态码: " + response.statusCode()));
+                            }
+                    )
+                    .bodyToMono(String.class)
+                    .subscribe(response -> {
+                        try {
+                            JsonNode jsonNode = objectMapper.readTree(response);
+                            String reply = jsonNode.path("choices").get(0)
+                                    .path("message").path("content").asText();
+                            if (model.toLowerCase().contains("deepseek"))
+                                reply = reply.split("</think>\\n\\n")[1];
+                            // 调用原有方法发送群消息
+                            GroupAction.sendGroupMsg(groupId, reply);
+                        } catch (Exception e) {
+                            log.error("API处理失败: {}", e.getMessage());
+                        }
+                    }, error -> {
+                        log.error("API调用失败: {}", error.getMessage());
+                    });
         }
 
         @Override

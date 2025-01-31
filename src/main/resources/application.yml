@@ -2,6 +2,12 @@ websocket:
     url: ws://localhost:3001
     accessToken:
 
+api:
+    enable: true
+    model: deepseek-r1-distill-llama-8b
+    url: http://localhost:1234/v1/chat/completions
+    key:
+
 spring:
     datasource:
         # 选择使用哪个数据源配置

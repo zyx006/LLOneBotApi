@@ -13,7 +13,7 @@
 
 ### 功能描述
 
-基于正向WebSocket(SpringBoot)实现的LLOneBot接口对接，支持自动重连，目前已实现以下功能：
+基于正向WebSocket(SpringBoot)实现的LLOneBot接口对接，支持自动重连和接入AI聊天（默认使用本地DeepSeek-R1 API），目前已实现以下功能：
 
 1、消息监听(输出到控制台日志)
 
@@ -21,9 +21,11 @@
 
 3、开启(关闭)消息同步，将某个群的消息广播到其他开启消息同步功能的群
 
-4、Minecraft白名单绑定、修改、删除和服务器重启投票功能（基于RCON协议）
+4、Minecraft白名单绑定、修改、删除和服务器重启投票功能（基于RCON协议）`可控制启用/禁用`
 
-5、部分群组相关 接口/动作 实现(详见action.GroupAction)：
+5、接入AI大模型API，实现群聊AI聊天（仅单轮对话）`可控制启用/禁用`
+
+6、部分群组相关 接口/动作 实现(详见action.GroupAction)：
     
     (1)获取群列表
         
@@ -60,6 +62,10 @@ spring:
     datasource:
         # 选择使用哪个数据源配置
         active-db: sqlite  # 可选值: sqlite, mysql
+        # 若使用mysql则需额外配置用户名和密码
+        mysql:
+          username: root
+          password: root
 ```
 
 注意：使用MySQL作为数据源时需要设置用户名和密码，并且要先手动创建数据库onebot，例如：
@@ -74,11 +80,22 @@ COLLATE utf8mb4_bin;
 
 ```yaml
 minecraft:
-    enable: true #控制是否启用相关功能
+    enable: true #控制是否启用该功能
     rcon:
         host: localhost
         port: 23456
         password: rconpwd
+```
+
+4、AI聊天相关配置：
+
+```yaml
+api:
+    enable: true #控制是否启用该功能
+    #模型为DeepSeek相关模型时会去除回复内容中的<think>部分
+    model: deepseek-r1-distill-llama-8b
+    url: http://localhost:1234/v1/chat/completions
+    key:
 ```
 
 ### 开发环境

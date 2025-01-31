@@ -10,7 +10,7 @@
     </parent>
     <groupId>cn.czyx007</groupId>
     <artifactId>LLOneBotApi</artifactId>
-    <version>0.3.2-SNAPSHOT</version>
+    <version>0.4.0</version>
     <name>LLOneBotApi</name>
     <description>LLOneBotApi</description>
 
@@ -21,6 +21,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <!-- HTTP客户端（推荐使用异步的WebClient） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
