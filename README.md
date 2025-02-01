@@ -92,7 +92,9 @@ minecraft:
 ```yaml
 api:
     enable: true #控制是否启用该功能
-    #模型为DeepSeek相关模型时会去除回复内容中的<think>部分
+    #仅对DeepSeek相关模型有效，可控制是否去除回复内容中的<think>部分
+    #空<think>块必被去除
+    showThink: true
     model: deepseek-r1-distill-llama-8b
     url: http://localhost:1234/v1/chat/completions
     key:

@@ -51,6 +51,9 @@ public class WebSocketClient {
     @Value("${api.enable}")
     private boolean apiEnable;
 
+    @Value("${api.showThink}")
+    private boolean showThink;
+
     @Value("${api.model}")
     private String model;
 
@@ -378,8 +381,11 @@ public class WebSocketClient {
                             JsonNode jsonNode = objectMapper.readTree(response);
                             String reply = jsonNode.path("choices").get(0)
                                     .path("message").path("content").asText();
-                            if (model.toLowerCase().contains("deepseek"))
+                            if (!showThink && model.toLowerCase().contains("deepseek"))
                                 reply = reply.split("</think>\\n\\n")[1];
+                            //若<think>部分为空，直接去除
+                            if (reply.startsWith("<think>\n\n</think>\n\n"))
+                                reply = reply.replace("<think>\n\n</think>\n\n", "");
                             // 调用原有方法发送群消息
                             GroupAction.sendGroupMsg(groupId, reply);
                         } catch (Exception e) {
