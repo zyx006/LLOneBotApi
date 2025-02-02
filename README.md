@@ -89,14 +89,26 @@ minecraft:
 
 4、AI聊天相关配置：
 
+可使用任意大模型的API接入，如DeepSeek官方API，SiliconFlow的DeepSeek API，自部署API等
+
+目前**推荐使用SiliconFlow API**，使用该链接注册可获赠2000万Tokens（14元余额）：https://cloud.siliconflow.cn/i/ihKzh4AB
+
+DeepSeek-R1官方配置：
+
+url=https://api.deepseek.com/chat/completions
+
+model=deepseek-reasoner
+
 ```yaml
 api:
-    enable: true #控制是否启用该功能
+    #控制是否启用该功能
+    enable: true 
     #仅对DeepSeek相关模型有效，可控制是否去除回复内容中的<think>部分
     #空<think>块必被去除
     showThink: true
-    model: deepseek-r1-distill-llama-8b
-    url: http://localhost:1234/v1/chat/completions
+    #以下为SiliconFlow API配置示例
+    model: deepseek-ai/DeepSeek-R1
+    url: https://api.siliconflow.cn/v1/chat/completions
     key:
 ```
 
