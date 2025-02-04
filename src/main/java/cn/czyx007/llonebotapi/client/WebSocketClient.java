@@ -29,9 +29,7 @@ import reactor.core.publisher.Mono;
 import java.math.BigInteger;
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * Websocket客户端，用于Websocket链接的建立，信息处理等
@@ -64,6 +62,8 @@ public class WebSocketClient {
     private String apiKey;
 
     private final Set<BigInteger> voteMember = new HashSet<>();
+
+    private final ConcurrentHashMap<BigInteger, CopyOnWriteArrayList<AIMessage>> messages = new ConcurrentHashMap<>();
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1); // 全局线程池
     private volatile boolean isConnecting = false; // 避免重复连接
@@ -321,7 +321,7 @@ public class WebSocketClient {
                                 }
                             } else GroupAction.sendGroupMsg(botData.getGroupId(), "你不在白名单中！");
                         } else if (apiEnable && rawMessage.startsWith("#")) {
-                            callLLMApi(rawMessage.substring(1), botData.getGroupId());
+                            callLLMApi(rawMessage.substring(1), botData.getGroupId(), botData.getUserId());
                         } else {
                             //群消息广播
                             if (groupSyncService.ifExists(botData.getGroupId())) {
@@ -355,12 +355,23 @@ public class WebSocketClient {
         }
 
         // 调用大模型API并异步回复
-        private void callLLMApi(String userInput, BigInteger groupId) {
+        private void callLLMApi(String userInput, BigInteger groupId, BigInteger userId) {
+            // 初始化或获取线程安全的列表
+            CopyOnWriteArrayList<AIMessage> msgList = messages.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>());
+            // 添加 user 消息前检查长度
+            synchronized (msgList) { // 对当前 userId 的列表加锁
+                if (msgList.size() > 10) {
+                    msgList.subList(0, 2).clear(); // 移除最旧的 user 和对应的 assistant
+                }
+                msgList.add(new AIMessage("user", userInput));
+                // 无需显式 put，因 newMsg 是原列表的引用
+            }
+
             // 构建请求体
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", model);
-            requestBody.put("messages", List.of(Map.of("role", "user", "content", userInput)));
             requestBody.put("temperature", 0.6);
+            requestBody.put("messages", objectMapper.convertValue(msgList, List.class));
 
             // 异步发送请求
             webClient.post()
@@ -371,6 +382,11 @@ public class WebSocketClient {
                             HttpStatusCode::isError, // 判断是否为错误状态码（如4xx/5xx）
                             response -> {
                                 log.error("API 错误状态码: {}", response.statusCode());
+                                synchronized (msgList) {
+                                    if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
+                                        msgList.removeLast();
+                                    }
+                                }
                                 // 返回自定义异常（触发 subscribe 的 onError）
                                 return Mono.error(new RuntimeException("API请求失败，状态码: " + response.statusCode()));
                             }
@@ -381,8 +397,13 @@ public class WebSocketClient {
                             JsonNode jsonNode = objectMapper.readTree(response);
                             String reply = jsonNode.path("choices").get(0)
                                     .path("message").path("content").asText();
+                            //解析回复正文（不包含思维链）
+                            String newMessage = reply.startsWith("<think>") ? reply.split("</think>\\n\\n")[1] : reply;
+                            synchronized (msgList) {
+                                msgList.add(new AIMessage("assistant", newMessage));
+                            }
                             if (!showThink && model.toLowerCase().contains("deepseek"))
-                                reply = reply.split("</think>\\n\\n")[1];
+                                reply = newMessage;
                             //若<think>部分为空，直接去除
                             if (reply.startsWith("<think>\n\n</think>\n\n"))
                                 reply = reply.replace("<think>\n\n</think>\n\n", "");
@@ -390,9 +411,19 @@ public class WebSocketClient {
                             GroupAction.sendGroupMsg(groupId, reply);
                         } catch (Exception e) {
                             log.error("API处理失败: {}", e.getMessage());
+                            synchronized (msgList) {
+                                if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
+                                    msgList.removeLast();
+                                }
+                            }
                         }
                     }, error -> {
                         log.error("API调用失败: {}", error.getMessage());
+                        synchronized (msgList) {
+                            if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
+                                msgList.removeLast();
+                            }
+                        }
                     });
         }
 
