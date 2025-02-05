@@ -169,7 +169,8 @@ public class WebSocketClient {
                                         "#重启投票";
                             }
                             if (apiEnable) {
-                                help += "\n#+非指令内容可聊天";
+                                help += "\n#清空聊天记录\n" +
+                                        "#+非指令内容可聊天";
                             }
                             GroupAction.sendGroupMsg(botData.getGroupId(), help);
                         } else if (rawMessage.startsWith("#禁言")) {
@@ -318,6 +319,11 @@ public class WebSocketClient {
                                     GroupAction.sendGroupMsg(botData.getGroupId(), "服务器未开启！");
                                 }
                             } else GroupAction.sendGroupMsg(botData.getGroupId(), "你不在白名单中！");
+                        } else if (apiEnable && "#清空聊天记录".equals(rawMessage)) {
+                            if (messages.containsKey(botData.getUserId())) {
+                                messages.get(botData.getUserId()).clear();
+                            }
+                            GroupAction.sendGroupMsg(botData.getGroupId(), "聊天记录清空成功！");
                         } else if (apiEnable && rawMessage.startsWith("#")) {
                             callLLMApi(rawMessage.substring(1), botData.getGroupId(), botData.getUserId());
                         } else {
