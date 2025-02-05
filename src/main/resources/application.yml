@@ -5,8 +5,8 @@ websocket:
 api:
     enable: true
     showThink: true
-    model: deepseek-r1-distill-llama-8b
-    url: http://localhost:1234/v1/chat/completions
+    model: deepseek-ai/DeepSeek-R1
+    url: https://api.siliconflow.cn/v1/chat/completions
     key:
 
 spring:

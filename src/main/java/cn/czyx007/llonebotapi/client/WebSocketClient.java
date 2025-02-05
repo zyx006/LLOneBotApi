@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tomcat.util.json.JSONParser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -60,10 +59,6 @@ public class WebSocketClient {
 
     @Value("${api.key}")
     private String apiKey;
-
-    private final Set<BigInteger> voteMember = new HashSet<>();
-
-    private final ConcurrentHashMap<BigInteger, CopyOnWriteArrayList<AIMessage>> messages = new ConcurrentHashMap<>();
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1); // 全局线程池
     private volatile boolean isConnecting = false; // 避免重复连接
@@ -118,7 +113,10 @@ public class WebSocketClient {
 
     private class MyWebSocketHandler extends TextWebSocketHandler {
         private WebClient webClient;
-        private final ObjectMapper objectMapper = new ObjectMapper();
+        private final ObjectMapper objectMapper = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+
+        private final Set<BigInteger> voteMember = new HashSet<>();
+        private final ConcurrentHashMap<BigInteger, CopyOnWriteArrayList<AIMessage>> messages = new ConcurrentHashMap<>();
 
         private final GroupSyncService groupSyncService;
         private final WhiteListService whiteListService;
@@ -148,9 +146,9 @@ public class WebSocketClient {
                 //负载获取
                 String payload = message.getPayload();
                 //解析数据类型
-                String postType = (String) new JSONParser(payload).parseObject().get("post_type");
+                String postType = objectMapper.readTree(payload).path("post_type").asText();
                 if (PostType.MESSAGE.equals(postType)) {
-                    BotData botData = new ObjectMapper().setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE).readValue(payload, BotData.class);
+                    BotData botData = objectMapper.readValue(payload, BotData.class);
                     //log.info(botData.toString());
                     //群消息
                     if("group".equals(botData.getMessageType())) {
@@ -382,11 +380,7 @@ public class WebSocketClient {
                             HttpStatusCode::isError, // 判断是否为错误状态码（如4xx/5xx）
                             response -> {
                                 log.error("API 错误状态码: {}", response.statusCode());
-                                synchronized (msgList) {
-                                    if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
-                                        msgList.removeLast();
-                                    }
-                                }
+                                handleError(msgList);
                                 // 返回自定义异常（触发 subscribe 的 onError）
                                 return Mono.error(new RuntimeException("API请求失败，状态码: " + response.statusCode()));
                             }
@@ -411,20 +405,20 @@ public class WebSocketClient {
                             GroupAction.sendGroupMsg(groupId, reply);
                         } catch (Exception e) {
                             log.error("API处理失败: {}", e.getMessage());
-                            synchronized (msgList) {
-                                if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
-                                    msgList.removeLast();
-                                }
-                            }
+                            handleError(msgList);
                         }
                     }, error -> {
                         log.error("API调用失败: {}", error.getMessage());
-                        synchronized (msgList) {
-                            if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
-                                msgList.removeLast();
-                            }
-                        }
+                        handleError(msgList);
                     });
+        }
+
+        private void handleError(List<AIMessage> msgList) {
+            synchronized (msgList) {
+                if (!msgList.isEmpty() && "user".equals(msgList.getLast().getRole())) {
+                    msgList.removeLast();
+                }
+            }
         }
 
         @Override

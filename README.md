@@ -13,7 +13,7 @@
 
 ### 功能描述
 
-基于正向WebSocket(SpringBoot)实现的LLOneBot接口对接，支持自动重连和接入AI聊天（默认使用本地DeepSeek-R1 API），目前已实现以下功能：
+基于正向WebSocket(SpringBoot)实现的LLOneBot接口对接，支持自动重连和接入AI聊天（默认使用SiliconFlow的DeepSeek-R1 API），目前已实现以下功能：
 
 1、消息监听(输出到控制台日志)
 
