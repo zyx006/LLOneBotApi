@@ -48,6 +48,9 @@ public class WebSocketClient {
     @Value("${api.enable}")
     private boolean apiEnable;
 
+    @Value("${api.chatLimits}")
+    private int chatLimits;
+
     @Value("${api.showThink}")
     private boolean showThink;
 
@@ -364,7 +367,7 @@ public class WebSocketClient {
             CopyOnWriteArrayList<AIMessage> msgList = messages.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>());
             // 添加 user 消息前检查长度
             synchronized (msgList) { // 对当前 userId 的列表加锁
-                if (msgList.size() > 10) {
+                if (msgList.size() > chatLimits) {
                     msgList.subList(0, 2).clear(); // 移除最旧的 user 和对应的 assistant
                 }
                 msgList.add(new AIMessage("user", userInput));

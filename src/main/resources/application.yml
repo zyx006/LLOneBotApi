@@ -4,6 +4,7 @@ websocket:
 
 api:
     enable: true
+    chatLimits: 10
     showThink: true
     model: deepseek-ai/DeepSeek-R1
     url: https://api.siliconflow.cn/v1/chat/completions
